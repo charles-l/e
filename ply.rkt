@@ -4,13 +4,22 @@
 
 (define *types* '("char" "uchar" "short" "ushort" "int" "uint" "float" "double"))
 
-(define $comment (parser-compose
-                   (string "comment")
-                   (manyUntil $anyChar $newline)
-                   (return null)))
+(define $comment (>> (string "comment")
+                     (manyUntil $anyChar $newline)))
 
 (define $word (>>= (manyUntil (noneOf " \n\t\r") $space)
                    (compose return list->string)))
+
+;; WARNING: this function will recurse if no $space is consumed - make sure to consume the whitespace to advance
+(define $strict-word (>>= (manyUntil $anyChar (lookAhead $space))
+                          (compose return list->string)))
+
+(define $line (manyUntil
+                (parser-one
+                  (~> $strict-word) (<or> (char #\space) (return null))) $newline))
+
+(parse-result $strict-word "asdf asdf asdf as\nasdf")
+
 
 (define (word s)
   (parser-compose
@@ -38,7 +47,7 @@
 
 (define $element
   (parser-seq
-    (>>= (word "element") return-sym)
+    (~ (word "element"))
     (>>= $word return-sym)
     $number
     (many1 $property)))
@@ -47,7 +56,7 @@
   (parser-compose (string "ply") $newline
                   (string "format ascii 1.0") $newline
                   (many1Until (<or> $element
-                                    $comment)
+                                    (>> $comment (return null)))
                               (try (word "end_header")))))
 
 
@@ -56,38 +65,18 @@
 (define element-count cadr)
 (define element-property-list caddr)
 
-; generates a list of indexes of requested properties from the header
-; expects desired fields in the format: ((element-name property ...) ...)
-(define (mask header desired-fields)
-  (map
-    (lambda (desired-element)
-      (let ((properties
-              (element-property-list
-                (assoc (car desired-element) header))))
-        (let ((r (map
-                   (lambda (x)
-                     (index-of
-                       properties
-                       x
-                       (lambda (a b)
-                         (eq? (cadr a) b))))
-                   (cdr desired-element))))
-          (if (any false? r)
-            (error "unexpected property in" desired-fields)
-            (cons (car desired-element) r)))))
-    desired-fields))
+(define (body header)
+  (for/vector #:length (length header) ((e header))
+    (for/vector #:length (element-count e) ((i (in-range (element-count e))))
+      (parse-result $line (current-input-port)))))
 
 
-(define (body header desired-fields)
-  (for ((e header))
-    (for ((i (in-range (cadr e))))
-      (parse-result
-        (make-list (length (caddr e)) $word) (current-input-port)))))
 
-; TODO: select desired fields when parsing body
+(define (parse-ply filename)
+  (with-input-from-file filename
+                        (λ ()
+                           (let* ((res (parse-result $header (current-input-port)))
+                                  (header (filter-not null? res)))
+                             (cons header
+                                   (body header))))))
 
-(with-input-from-file "x.ply"
-                      (λ ()
-                         (let* ((res (parse-result $header (current-input-port)))
-                                (header (map cdr (filter-not null? res))))
-                           header)))
