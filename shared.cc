@@ -28,6 +28,9 @@ struct Character {
 
 std::map<GLchar, Character> Characters;
 GLuint VAO, VBO;
+GLuint cursorVAO, cursorVBO, cursorShader;
+
+extern "C" void compileCursorShader();
 
 extern "C" GLFWwindow *init() {
     // Init GLFW
@@ -105,6 +108,7 @@ extern "C" GLFWwindow *init() {
         Characters.insert(std::pair<GLchar, Character>(c, character));
     }
     glBindTexture(GL_TEXTURE_2D, 0);
+
     // Destroy FreeType once we're finished
     FT_Done_Face(face);
     FT_Done_FreeType(ft);
@@ -115,13 +119,35 @@ extern "C" GLFWwindow *init() {
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 6 * 4, NULL, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), NULL);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), 0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
+    float cursor[] = {
+        -50.0f, -50.0f, 0.0f,
+         50.0f, -50.0f, 0.0f,
+         0.0f,  50.0f, 0.0f
+    };
+
+    // Configure VAO/VBO for cursor
+    glGenVertexArrays(1, &cursorVAO);
+    glGenBuffers(1, &cursorVBO);
+    glBindVertexArray(cursorVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, cursorVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cursor), cursor, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), NULL);
+    glEnableVertexAttribArray(0);
+
+    compileCursorShader();
 
     return window;
+}
+
+extern "C" void renderCursor() {
+    glUseProgram(cursorShader);
+    glBindVertexArray(cursorVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
 extern "C" int renderChar(char c, GLfloat x, GLfloat y, GLfloat scale) {
@@ -171,6 +197,44 @@ extern "C" void RenderText(unsigned int shaderID, std::string text, GLfloat x, G
     }
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+extern "C" void compileCursorShader() {
+    const char *vertex = "#version 400 core\n"
+        "layout (location = 0) in vec4 vertex;"
+
+        "uniform mat4 projection;"
+
+        "void main()"
+        "{"
+        "    gl_Position = projection * vec4(vertex.xy, 0.0, 1.0);"
+        "}";
+    const char *fragment = "#version 400 core\n"
+        "out vec4 color;"
+
+        "void main()"
+        "{"
+        "    color = vec4(1.0, 1.0, 0.0, 1.0);"
+        "}";
+    unsigned int vs, fs;
+
+    vs = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vs, 1, &vertex, NULL);
+    glCompileShader(vs);
+
+    fs = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fs, 1, &fragment, NULL);
+    glCompileShader(fs);
+
+
+    cursorShader = glCreateProgram();
+
+    glAttachShader(cursorShader, vs);
+    glAttachShader(cursorShader, fs);
+    glLinkProgram(cursorShader);
+
+    glDeleteShader(vs);
+    glDeleteShader(fs);
 }
 
 extern "C" unsigned int compileTextShader() {
@@ -224,6 +288,9 @@ extern "C" void moveCamera(unsigned int shaderID, float x, float y) {
     glUseProgram(shaderID);
     glm::mat4 projection = glm::translate(glm::ortho(0.0f, static_cast<GLfloat>(WIDTH), 0.0f, static_cast<GLfloat>(HEIGHT)), glm::vec3(x, y, 0));
     glUniformMatrix4fv(glGetUniformLocation(shaderID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    glUseProgram(cursorShader);
+    glUniformMatrix4fv(glGetUniformLocation(cursorShader, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    glUseProgram(0);
 }
 
 extern "C" void prepareRendering(unsigned int shaderID, float r, float g, float b) {
