@@ -16,6 +16,7 @@
 (define-native renderCursor (_fun -> _void))
 (define-native glfwSwapBuffers (_fun _WINDOW-ptr -> _void))
 (define-native glfwTerminate (_fun -> _void))
+(define-native glUseProgram (_fun _uint -> _void))
 
 (define-native glfwSetCharCallback (_fun _WINDOW-ptr (_fun _WINDOW-ptr _uint -> _void) -> _void))
 (define-native glfwSetKeyCallback (_fun _WINDOW-ptr (_fun _WINDOW-ptr _int _int _int _int -> _void) -> _void))
@@ -86,9 +87,8 @@
       (glfwPollEvents)
       (prepareRendering shader-id 0.0 1.0 1.0)
       (for ((i (in-range 0 (vector-length *buffer*))))
-        (render-string (vector-ref *buffer* i) i)
-        (renderCursor)
-        )
+        (render-string (vector-ref *buffer* i) i))
+      (renderCursor)
       (glfwSwapBuffers win)
       (loop))))
 

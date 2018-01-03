@@ -183,7 +183,6 @@ extern "C" int renderChar(char c, GLfloat x, GLfloat y, GLfloat scale) {
 
 extern "C" void RenderText(unsigned int shaderID, std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color)
 {
-    glUseProgram(shaderID);
     glUniform3f(glGetUniformLocation(shaderID, "textColor"), color.x, color.y, color.z);
     glActiveTexture(GL_TEXTURE0);
     glBindVertexArray(VAO);
