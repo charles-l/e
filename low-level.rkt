@@ -1,5 +1,6 @@
 #lang racket
 (provide window-class%
+         glfw-key-right
          glfw-key-enter
          glfw-key-backspace
          glfw-press
@@ -44,6 +45,7 @@
 
 (define glfw-key-enter 257)
 (define glfw-key-backspace 259)
+(define glfw-key-right 262)
 (define glfw-press 1)
 
 (define *font-size* 15.0)
