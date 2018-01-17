@@ -35,6 +35,7 @@
 (define-native nvgFontSize (_fun _nvg-ptr _float -> _void))
 (define-native nvgTextLetterSpacing (_fun _nvg-ptr _float -> _void))
 (define-native setFill (_fun _nvg-ptr _uint8 _uint8 _uint8 _uint8 -> _void))
+(define-native calcCharXPos (_fun _nvg-ptr _string _int -> _float))
 (define-native renderText (_fun _nvg-ptr _float _float _string -> _void))
 (define-native clear (_fun -> _void))
 
@@ -61,12 +62,18 @@
     (glfwSetCharCallback %%window char-handler)
     (glfwSetKeyCallback %%window key-handler)
 
-    (define/public (text x y t)
+    (define/public (calculate-character-x str i)
+      (calcCharXPos %%nvg-context str i))
+
+    (define/public (draw-text x y t)
       (renderText %%nvg-context x y t))
 
-    (define/public (rect x y w h color)
+    (define/public (set-color r g b a)
+      (setFill %%nvg-context r g b a))
+
+    (define/public (draw-rect x y w h)
+      (nvgBeginPath %%nvg-context)
       (nvgRect %%nvg-context x y w h)
-      (setFill %%nvg-context (first color) (second color) (third color) (fourth color))
       (nvgFill %%nvg-context))
 
     (define/public (render-loop thunk)

@@ -15,7 +15,7 @@
     (set! *buffer* (vector-append a #("") b)))
   (set-box! *cursor* (cons (add1 (current-lineno)) 0)))
 
-(define (backspace! p)
+(define (backspace!)
   (vector-set!
     *buffer*
     (current-lineno)
@@ -24,10 +24,10 @@
         (substring
           (vector-ref *buffer* (current-lineno))
           0
-          (current-linepos))
+          (current-lineno))
         (substring
           (vector-ref *buffer* (current-lineno))
-          (add1 (current-linepos))
+          (current-linepos)
           (string-length (vector-ref *buffer* (current-lineno)))))
       "")))
 
@@ -37,31 +37,36 @@
       ((eq? key glfw-key-enter)
        (new-line! (vector-length *buffer*)))
       ((eq? key glfw-key-backspace)
-       (backspace! (cons (sub1 (vector-length *buffer*))
-                         (sub1 (string-length (vector-ref *buffer* (sub1 (vector-length *buffer*)))))))))))
+       (backspace!)))))
 
 (define (char-handler win codept)
   (vector-set!
     *buffer*
     (current-lineno)
-    (string-append (vector-ref *buffer* (current-lineno)) (~a (integer->char codept)))))
+    (string-append (vector-ref *buffer* (current-lineno)) (~a (integer->char codept))))
+  (set-box! *cursor* (cons (current-lineno) (add1 (current-linepos)))))
+
 
 (define win (new window-class% (char-handler char-handler) (key-handler key-handler)))
 (send win render-loop
       (λ ()
          (for ((l *buffer*)
                (i (in-naturals)))
-           (send
-             win
-             text
-             *padding*
-             (exact->inexact (* (add1 i) *line-height*))
-             l))
-         (send
-           win
-           rect
-           (+ *padding* (* *font-size* (current-linepos)))
-           (exact->inexact (+ *padding* (* (current-lineno) *line-height*)))
-           (/ *font-size* 2)
-           *font-size*
-           '(255 255 0 80))))
+           (send win draw-text
+                 *padding*
+                 (exact->inexact (* (add1 i) *line-height*))
+                 l))
+         (send win set-color 255 255 255 50)
+         (send win draw-text 255.0 255.0 (~a (unbox *cursor*)))
+         (let ((cursor-pixel-x
+                 (+ *padding*
+                    (send win calculate-character-x
+                          (vector-ref *buffer* (current-lineno))
+                          (current-linepos))))
+               (cursor-pixel-y
+                 (exact->inexact (+ *padding* (* (current-lineno) *line-height*)))))
+           (send win draw-rect
+                 cursor-pixel-x
+                 cursor-pixel-y
+                 (/ *font-size* 2)
+                 *font-size*))))

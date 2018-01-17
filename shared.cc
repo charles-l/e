@@ -51,6 +51,13 @@ extern "C" void renderText(NVGcontext *nvg, float x, float y, char *text) {
     nvgText(nvg, x, y, text, NULL);
 }
 
+extern "C" float calcCharXPos(NVGcontext *nvg, char *s, int i) {
+#define MAX_GLYPHS 100
+    NVGglyphPosition p[MAX_GLYPHS];
+    nvgTextGlyphPositions(nvg, 0, 0, s, NULL, p, MAX_GLYPHS);
+    return p[i].x;
+}
+
 extern "C" GLFWwindow *init() {
     GLFWwindow* window;
 
