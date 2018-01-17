@@ -1,22 +1,38 @@
 #lang racket
+
 (require ffi/unsafe
          ffi/unsafe/define)
 
-(define-ffi-definer define-native (ffi-lib "shared"))
+(require racket/stream)
 
+(define _nvg-color (_array _float 4))
+
+(define-ffi-definer define-native (ffi-lib "./shared"))
+
+(define _nvg-ptr (_cpointer 'NVGContext))
 (define _WINDOW-ptr (_cpointer 'GLFWwindow))
 
 (define-native init (_fun -> _WINDOW-ptr))
-(define-native compileTextShader (_fun -> _uint))
-(define-native moveCamera (_fun _uint _float _float -> _void))
-(define-native glfwWindowShouldClose (_fun _WINDOW-ptr -> _int))
+(define-native initVG (_fun _WINDOW-ptr -> _nvg-ptr))
+(define-native glfwWindowShouldClose (_fun _WINDOW-ptr -> _bool))
 (define-native glfwPollEvents (_fun -> _void))
-(define-native prepareRendering (_fun _uint _float _float _float -> _void))
-(define-native renderChar (_fun _uint8 _float _float _float -> _int))
-(define-native renderCursor (_fun -> _void))
 (define-native glfwSwapBuffers (_fun _WINDOW-ptr -> _void))
 (define-native glfwTerminate (_fun -> _void))
 (define-native glUseProgram (_fun _uint -> _void))
+(define-native nvgSave (_fun _nvg-ptr -> _void))
+(define-native nvgRestore (_fun _nvg-ptr -> _void))
+(define-native nvgMoveTo (_fun _nvg-ptr _float _float -> _void))
+(define-native nvgBeginFrame (_fun _nvg-ptr _int _int _float -> _void))
+(define-native nvgEndFrame (_fun _nvg-ptr -> _void))
+(define-native nvgBeginPath (_fun _nvg-ptr -> _void))
+(define-native nvgClosePath (_fun _nvg-ptr -> _void))
+(define-native nvgRect (_fun _nvg-ptr _float _float _float _float -> _void))
+(define-native nvgFill (_fun _nvg-ptr -> _void))
+(define-native nvgFontSize (_fun _nvg-ptr _float -> _void))
+(define-native nvgTextLetterSpacing (_fun _nvg-ptr _float -> _void))
+(define-native setFill (_fun _nvg-ptr _uint8 _uint8 _uint8 _uint8 -> _void))
+(define-native renderText (_fun _nvg-ptr _float _float _string -> _void))
+(define-native clear (_fun -> _void))
 
 (define-native glfwSetCharCallback (_fun _WINDOW-ptr (_fun _WINDOW-ptr _uint -> _void) -> _void))
 (define-native glfwSetKeyCallback (_fun _WINDOW-ptr (_fun _WINDOW-ptr _int _int _int _int -> _void) -> _void))
@@ -26,30 +42,38 @@
 (define glfw-press 1)
 
 (define *buffer* (vector ""))
+(define *cursor* (box '(0 . 0)))
 
-(define cursor '(0 . 0))
+(define *font-size* 15.0)
+(define *line-height* 15.0)
+(define *padding* 5.0)
 
-(define p-line car)
-(define p-char cdr)
+
+(define (current-line)
+  (car (unbox *cursor*)))
+
+(define (current-linepos)
+  (cdr (unbox *cursor*)))
 
 (define (new-line! i)
   (let-values (((a b) (vector-split-at *buffer* i)))
-    (set! *buffer* (vector-append a #("") b))))
+    (set! *buffer* (vector-append a #("") b)))
+  (set-box! *cursor* (cons (add1 (current-line)) 0)))
 
 (define (backspace! p)
   (vector-set!
     *buffer*
-    (p-line p)
+    (current-line)
     (string-join
       (list
         (substring
-          (vector-ref *buffer* (p-line p))
+          (vector-ref *buffer* (current-line))
           0
-          (p-char p))
+          (current-linepos))
         (substring
-          (vector-ref *buffer* (p-line p))
-          (add1 (p-char p))
-          (string-length (vector-ref *buffer* (p-line p)))))
+          (vector-ref *buffer* (current-line))
+          (add1 (current-linepos))
+          (string-length (vector-ref *buffer* (current-line)))))
       "")))
 
 (define (key-handler win key scancode action mods)
@@ -69,27 +93,38 @@
     *buffer*
     (vector-last-i *buffer*)
     (string-append (vector-ref *buffer* (vector-last-i *buffer*)) (~a (integer->char codept))))
-  (print (integer->char codept))
-  (newline))
+  #;(moveCursor (exact->inexact (* +character-distance+ 0)) (+ 600.0 0))
+  )
 
-(define (render-string s y)
-  (for/list ((e (map char->integer (string->list s)))
-             (i (in-range 0 (string-length s))))
-    (renderChar e (* (exact->inexact i) 24.0) (- 550.0 (* y 40)) 1.0)))
-
-(let* ((win (init))
-       (shader-id (compileTextShader)))
+(let ((win (init)))
   (glfwSetCharCallback win char-handler)
   (glfwSetKeyCallback win key-handler)
-  (moveCamera shader-id 0.0 0.0)
-  (let loop ()
-    (when (zero? (glfwWindowShouldClose win))
-      (glfwPollEvents)
-      (prepareRendering shader-id 0.0 1.0 1.0)
-      (for ((i (in-range 0 (vector-length *buffer*))))
-        (render-string (vector-ref *buffer* i) i))
-      (renderCursor)
-      (glfwSwapBuffers win)
-      (loop))))
+  (let ((vg (initVG win)))
+    (let loop ()
+      (unless (glfwWindowShouldClose win)
+        (glfwPollEvents)
+        (clear)
+
+        (nvgBeginFrame vg 800 600 (exact->inexact (/ 8 6)))
+        (nvgBeginPath vg)
+        (nvgFontSize vg *font-size*)
+        (for ((l *buffer*)
+              (i (in-naturals)))
+          (renderText vg
+                      *padding*
+                      (exact->inexact (* (add1 i) *line-height*))
+                      l))
+        (nvgRect vg
+                 (+ *padding* (* *font-size* (current-linepos)))
+                 (exact->inexact (+ *padding* (* (current-line) *line-height*)))
+                 (/ *font-size* 2)
+                 *font-size*)
+        (setFill vg 255 255 0 80)
+        (nvgFill vg)
+        (nvgClosePath vg)
+        (nvgEndFrame vg)
+
+        (glfwSwapBuffers win)
+        (loop)))))
 
 (glfwTerminate)
