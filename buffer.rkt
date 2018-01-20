@@ -1,18 +1,22 @@
-#lang debug racket
+#lang racket
 
 ; TODO: performance tune the crap outta this vector stuff
+
+(provide
+  make-buffer
+  down/char-ref
+  down/line-ref
+  )
 
 (require zippers)
 (require srfi/13)
 
 (define (make-buffer)
-  (zip '("")))
+  (zip #("")))
 
 
 (define (last-vector-index v)
   (sub1 (vector-length v)))
-
-#;(define (insert buffer contents))
 
 (define (buffer-before buffer y (x 0))
   (let ((lines-before (vector-take buffer y)))
@@ -64,20 +68,18 @@
   (zipper-movement
     (match-lambda
       ((zipper (? vector? v) context)
-       (zipper (substring (vector-ref v li) i (add1 i))
-               (cons (buffer-item-frame
-                       (buffer-before v li i)
-                       (buffer-after v li i))
-                     context))))
+       (let ((cur-line (vector-ref v li)))
+         (zipper (substring cur-line i (min (add1 i) (string-length cur-line)))
+                 (cons (buffer-item-frame
+                         (buffer-before v li i)
+                         (buffer-after v li i))
+                       context)))))
     (lambda (z)
       (and (vector? (zipper-focus z))
            (< li (vector-length (zipper-focus z)))
            (< i (string-length (vector-ref (zipper-focus z) li)))))))
 
 
-(define b (zip #("a string"  "some stuff"  "a single line"  "c"  ""  "more")))
+;(define b (zip #("a string"  "some stuff"  "a single line"  "c"  ""  "more")))
 
-(edit (const "some letters ") ((down/char-ref 0 3) (up (edit (const "different line") ((down/line-ref 2) b)))))
-
-
-#;(define (delete buffer))
+;(edit (const "some letters ") ((down/char-ref 0 3) (up (edit (const "different line") ((down/line-ref 2) b)))))

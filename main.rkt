@@ -1,8 +1,18 @@
 #lang racket
+(require "buffer.rkt")
 (require "low-level.rkt")
 
-(define *buffer* (vector ""))
+(require zippers)
+(require lens)
+
+(define box-lens (make-lens unbox set-box!))
+
+; TODO: use frp rather than boxes
+(define *buffer* (box (make-buffer)))
 (define *cursor* (box '(0 . 0)))
+
+(define (current-line)
+  (zipper-focus ((down/line-ref (current-lineno)) (unbox *buffer*))))
 
 (define (current-lineno)
   (car (unbox *cursor*)))
@@ -10,96 +20,58 @@
 (define (current-linepos)
   (cdr (unbox *cursor*)))
 
-(define (current-line)
-  (vector-ref *buffer* (current-lineno)))
+(define (make-safe-move! m)
+  (when (can-move? m (unbox *buffer*))
+    (set-box! *buffer* (m (unbox *buffer*)))
+    #t)
+  #f)
 
-(define (insert-line-after! i)
-  (let* ((i (add1 (clamp0 i))) (a (vector-take *buffer* i)) (b (vector-drop *buffer* i)))
-    (set! *buffer* (vector-append a #("") b))))
-
-(define (backspace!)
-  (vector-set!
-    *buffer*
-    (current-lineno)
-    (string-join
-      (list
-        (substring
-          (vector-ref *buffer* (current-lineno))
-          0
-          (clamp0 (- (current-linepos) 2)))
-        (substring
-          (vector-ref *buffer* (current-lineno))
-          (sub1 (current-linepos))
-          (string-length (vector-ref *buffer* (current-lineno)))))
-      "")))
-
-;;; clamp a value to >= 0
-(define (clamp0 v)
-  (max 0 v))
-
-;;; clamp a value to >= 1
-(define (clamp1 v)
-  (max 1 v))
-
-;;; clamp value to range [lb, ub)
-(define (clamp-upto v ub (lb 0))
-  (min (max lb v) (sub1 ub)))
-
-;; lock the cursor back onto the "rail" of text, otherwise it
-;; might sit outside of the valid range of positions in the buffer
-(define (clamp-cursor!)
-  (let* ((lineno (clamp-upto (current-lineno) (vector-length *buffer*)))
-         (linepos (clamp-upto (current-linepos) (add1 (string-length (vector-ref *buffer* lineno))))))
-    (set-box! *cursor* (cons lineno linepos))))
-
-(define (cursor-up!)
-  (set-box! *cursor* (cons (sub1 (current-lineno)) (current-linepos))))
-
-(define (cursor-down!)
-  (set-box! *cursor* (cons (add1 (current-lineno)) (current-linepos))))
-
-(define (cursor-left!)
-  (set-box! *cursor* (cons (current-lineno) (sub1 (current-linepos)))))
-
-(define (cursor-right!)
-  (set-box! *cursor* (cons (current-lineno) (add1 (current-linepos)))))
+(define (cursor-move! dir)
+  (let ((new-cursor
+          (case dir
+            ((up)
+             (lens-transform car-lens (unbox *cursor*) sub1))
+            ((down)
+             (lens-transform car-lens (unbox *cursor*) add1))
+            ((left)
+             (lens-transform cdr-lens (unbox *cursor*) sub1))
+            ((right)
+             (lens-transform cdr-lens (unbox *cursor*) add1)))))
+    (when (make-safe-move! (down/char-ref (car new-cursor) (cdr new-cursor)))
+      (set-box! *cursor* new-cursor))))
 
 (define (key-handler win key scancode action mods)
   (when (eq? action glfw-press)
     (cond
       ((eq? key glfw-key-up)
-       (cursor-up!)
-       (clamp-cursor!))
+       (cursor-move! 'up))
       ((eq? key glfw-key-down)
-       (cursor-down!)
-       (clamp-cursor!))
+       (cursor-move! 'down))
       ((eq? key glfw-key-right)
-       (cursor-right!)
-       (clamp-cursor!))
+       (cursor-move! 'right))
       ((eq? key glfw-key-left)
-       (cursor-left!)
-       (clamp-cursor!))
+       (cursor-move! 'left))
       ((eq? key glfw-key-enter)
-       (insert-line-after! (current-lineno))
-       (cursor-down!)
-       (clamp-cursor!))
+       ;(insert-line-after! (current-lineno))
+       ;(cursor-down!)
+       )
       ((eq? key glfw-key-backspace)
-       (backspace!)
-       (cursor-left!)
-       (clamp-cursor!)))
+       ;(backspace!)
+       ;(cursor-left!)
+      ; (clamp-cursor!)
+       ))
     ))
 
 (define (char-handler win codept)
-  (vector-set!
+  (set-box!
     *buffer*
-    (current-lineno)
-    (string-append (vector-ref *buffer* (current-lineno)) (~a (integer->char codept))))
-  (set-box! *cursor* (cons (current-lineno) (add1 (current-linepos)))))
+    (up (edit (const (string (integer->char codept))) ((down/char-ref (current-lineno) (current-linepos)) (unbox *buffer*)))))
+  (cursor-move! 'right))
 
 (define win (new window-class% (char-handler char-handler) (key-handler key-handler)))
 (send win render-loop
       (λ ()
-         (for ((l *buffer*)
+         (for ((l (rebuild (unbox *buffer*)))
                (i (in-naturals)))
            (send win draw-text
                  *padding*
