@@ -80,6 +80,16 @@
            (< i (string-length (vector-ref (zipper-focus z) li)))))))
 
 
+(define (right/buffer z)
+  (zipper-movement
+    (match-lambda
+      ((zipper x (buffer-item-frame before after))
+       (zipper (vector-ref before) (string-ref (vector-ref after 0) 0))
+       )
+      )
+    )
+  )
+
 ;(define b (zip #("a string"  "some stuff"  "a single line"  "c"  ""  "more")))
 
 ;(edit (const "some letters ") ((down/char-ref 0 3) (up (edit (const "different line") ((down/line-ref 2) b)))))

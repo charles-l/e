@@ -65,7 +65,8 @@
 (define (char-handler win codept)
   (set-box!
     *buffer*
-    (up (edit (const (string (integer->char codept))) ((down/char-ref (current-lineno) (current-linepos)) (unbox *buffer*)))))
+    (up (edit (const (string (integer->char codept)))
+              ((down/char-ref (current-lineno) (current-linepos)) (unbox *buffer*)))))
   (cursor-move! 'right))
 
 (define win (new window-class% (char-handler char-handler) (key-handler key-handler)))
@@ -73,27 +74,27 @@
       (λ ()
          (for ((l (rebuild (unbox *buffer*)))
                (i (in-naturals)))
-           (send win draw-text
+           (send win text
                  *padding*
                  (exact->inexact (* (add1 i) *line-height*))
                  l))
          (send win set-color 255 255 255 50)
-         (send win draw-text 255.0 255.0 (~a (unbox *cursor*)))
+         (send win text 255.0 255.0 (~a (unbox *cursor*)))
 
          ; TODO: clean this mess up
          (let ((cursor-pixel-x
                  (+ *padding*
                     (if (< (current-linepos) (string-length (current-line)))
-                      (send win calculate-character-x
-                            (current-line)
-                            (sub1 (current-linepos)))
-                      (let ((l (sub1 (string-length (current-line)))))
-                        (+ (send win calculate-character-x (current-line) l)
-                           (* (sub1 (- (current-linepos) l)) (/ *font-size* 2)))))))
+                        (send win calculate-character-x
+                              (current-line)
+                              (sub1 (current-linepos)))
+                        (let ((l (sub1 (string-length (current-line)))))
+                         (+ (send win calculate-character-x (current-line) l)
+                            (* (sub1 (- (current-linepos) l)) (/ *font-size* 2)))))))
                (cursor-pixel-y
                  (exact->inexact (+ *padding* (* (current-lineno) *line-height*)))))
-           (send win draw-rect
-                 cursor-pixel-x
-                 cursor-pixel-y
+           (send win rect
+                 (exact->inexact cursor-pixel-x)
+                 (exact->inexact cursor-pixel-y)
                  (/ *font-size* 2)
                  *font-size*))))
